@@ -1,65 +1,135 @@
-import Image from "next/image";
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/useAuthStore';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import API from '@/utils/api';
+import { StoryRail } from '@/components/story/StoryRail';
+import { CreatePost } from '@/components/post/CreatePost';
+import { PostCard } from '@/components/post/PostCard';
 
 export default function Home() {
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const [posts, setPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // If not authenticated and not loading, redirect to login
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [isAuthenticated, authLoading, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchFeed();
+    }
+  }, [isAuthenticated]);
+
+  const fetchFeed = async () => {
+    try {
+      // Mock data for now until we have real posts from API
+      // const res = await API.get('/posts/feed');
+      // if (res.success) setPosts(res.data);
+
+      // Simulating delay
+      setTimeout(() => {
+        setPosts([
+          {
+            id: '1',
+            content: 'Just setting up my new premium social media app! 🚀 #coding #nextjs',
+            created_at: new Date().toISOString(),
+            author: {
+              id: '2',
+              username: 'jane_doe',
+              display_name: 'Jane Doe',
+              avatar_url: 'https://i.pravatar.cc/150?u=2'
+            },
+            likes_count: 42,
+            comments_count: 5,
+            has_liked: false,
+            media_urls: ['https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=800&q=80']
+          },
+          {
+            id: '2',
+            content: 'Loving the dark mode on this thing. shadcn/ui is a game changer.',
+            created_at: new Date(Date.now() - 3600000).toISOString(),
+            author: {
+              id: '3',
+              username: 'mike_dev',
+              display_name: 'Mike Developer',
+              avatar_url: 'https://i.pravatar.cc/150?u=3'
+            },
+            likes_count: 12,
+            comments_count: 2,
+            has_liked: true
+          }
+        ]);
+        setIsLoading(false);
+      }, 1000);
+    } catch (error) {
+      console.error('Failed to fetch feed', error);
+      setIsLoading(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse text-primary font-bold">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="max-w-xl mx-auto py-8 px-4 space-y-6">
+      <header className="flex items-center justify-between mb-6 md:hidden">
+        <h1 className="text-xl font-bold">Mini Social</h1>
+      </header>
+
+      {/* Stories */}
+      <StoryRail />
+
+      {/* Create Post */}
+      <CreatePost />
+
+      {/* Posts Feed */}
+      <div className="space-y-6">
+        {isLoading ? (
+          // Loading Skeletons
+          [1, 2, 3].map((i) => (
+            <Card key={i} className="w-full">
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-[200px]" />
+                    <Skeleton className="h-4 w-[150px]" />
+                  </div>
+                </div>
+                <Skeleton className="h-48 w-full rounded-md" />
+              </CardContent>
+            </Card>
+          ))
+        ) : posts.length > 0 ? (
+          posts.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))
+        ) : (
+          <div className="text-center py-10 text-muted-foreground">
+            <p>No posts yet. Follow someone to see their posts!</p>
+            <Button variant="link" onClick={() => router.push('/explore')}>
+              Explore Users
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

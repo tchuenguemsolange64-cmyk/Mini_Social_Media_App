@@ -53,17 +53,17 @@ const postController = {
           .select('id')
           .in('username', mentions);
 
-        for (const mentionedUser of mentionedUsers || []) {
-          if (mentionedUser.id !== userId) {
-            await User.createNotification({
-              recipient_id: mentionedUser.id,
-              sender_id: userId,
-              type: 'mention',
-              reference_type: 'post',
-              reference_id: post.id
-            });
-          }
-        }
+        const notifications = (mentionedUsers || [])
+          .filter(mentionedUser => mentionedUser.id !== userId)
+          .map(mentionedUser => User.createNotification(supabase, {
+            recipient_id: mentionedUser.id,
+            sender_id: userId,
+            type: 'mention',
+            reference_type: 'post',
+            reference_id: post.id
+          }));
+
+        await Promise.all(notifications);
       }
 
       res.status(201).json({

@@ -21,8 +21,9 @@ app.use(helmet({
 }));
 
 // CORS configuration
+// CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: true, // Allow all origins for development
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -96,7 +97,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
@@ -104,7 +105,7 @@ const server = app.listen(PORT, () => {
 ║                                                            ║
 ║   Environment: ${NODE_ENV.padEnd(43)}║
 ║   Port: ${PORT.toString().padEnd(51)}║
-║   URL: http://localhost:${PORT}${''.padEnd(38)}║
+║   URL: http://0.0.0.0:${PORT}${''.padEnd(38)}║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
   `);

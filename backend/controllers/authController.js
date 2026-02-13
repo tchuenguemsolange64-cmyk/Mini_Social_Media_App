@@ -54,11 +54,10 @@ const authController = {
       if (authError) throw authError;
 
       // Note: Data insertion into public.users is handled by the database trigger 'on_auth_user_created'
-      // attempting to manually insert here could cause race conditions or duplicate key errors.
 
       res.status(201).json({
         success: true,
-        message: 'User registered successfully. Please check your email for verification link if enabled.',
+        message: 'User registered successfully.',
         data: {
           user: {
             id: authData.user?.id,
@@ -97,10 +96,25 @@ const authController = {
 
       if (error) throw error;
 
-      // Get user profile using req.supabase
-      // Note: RLS policies must allow users to read their own profile
+      // Create a temporary client with the new token to fetch profile
+      // This ensures we have permission to read the user's own profile even if it's private
+      const { createClient } = require('@supabase/supabase-js');
+      const authenticatedClient = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY,
+        {
+          global: {
+            headers: {
+              Authorization: `Bearer ${data.session.access_token}`
+            }
+          },
+          auth: {
+            persistSession: false
+          }
+        }
+      );
 
-      const { data: profile, error: profileError } = await req.supabase
+      const { data: profile, error: profileError } = await authenticatedClient
         .from('users')
         .select('*')
         .eq('id', data.user.id)
@@ -111,14 +125,6 @@ const authController = {
       }
 
       // Update last login
-      // We attempt to update, but if RLS prevents it (e.g. only allow update matching auth.uid()) and we are using anon client with just a session...
-      // Actually, req.supabase SHOULD have the token if we set it?
-      // No, in 'login', req.supabase is initialized with the request headers. The request headers do NOT contain the token yet.
-      // So req.supabase is ANON.
-      // To update the user's last_login, we would need to use a client authenticated with the NEW session.
-      // Or use supabaseAdmin.
-      // Let's use supabaseAdmin for this system task if available, or skip it.
-
       if (supabaseAdmin) {
         await supabaseAdmin
           .from('users')
