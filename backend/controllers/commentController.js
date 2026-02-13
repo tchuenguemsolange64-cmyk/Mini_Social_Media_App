@@ -1,6 +1,5 @@
 const Comment = require('../models/Comment');
 const User = require('../models/User');
-const { supabase } = require('../models');
 
 const commentController = {
   // Create a comment
@@ -26,7 +25,7 @@ const commentController = {
       }
 
       // Check if post exists
-      const { data: post } = await supabase
+      const { data: post } = await req.supabase
         .from('posts')
         .select('id, author_id, is_deleted')
         .eq('id', postId)
@@ -41,7 +40,7 @@ const commentController = {
 
       // If it's a reply, check if parent comment exists
       if (parent_id) {
-        const { data: parentComment } = await supabase
+        const { data: parentComment } = await req.supabase
           .from('comments')
           .select('id')
           .eq('id', parent_id)
@@ -61,7 +60,7 @@ const commentController = {
       const mentionRegex = /@(\w+)/g;
       const mentions = [...content.matchAll(mentionRegex)].map(match => match[1]);
 
-      const comment = await Comment.create({
+      const comment = await Comment.create(req.supabase, {
         post_id: postId,
         author_id: userId,
         content: content.trim(),
@@ -71,14 +70,14 @@ const commentController = {
 
       // Create notifications for mentions
       if (mentions.length > 0) {
-        const { data: mentionedUsers } = await supabase
+        const { data: mentionedUsers } = await req.supabase
           .from('users')
           .select('id')
           .in('username', mentions);
 
         for (const mentionedUser of mentionedUsers || []) {
           if (mentionedUser.id !== userId) {
-            await User.createNotification({
+            await User.createNotification(req.supabase, {
               recipient_id: mentionedUser.id,
               sender_id: userId,
               type: 'mention',
@@ -110,7 +109,7 @@ const commentController = {
       const { limit = 20, offset = 0 } = req.query;
 
       // Check if post exists
-      const { data: post } = await supabase
+      const { data: post } = await req.supabase
         .from('posts')
         .select('id, is_deleted')
         .eq('id', postId)
@@ -123,7 +122,7 @@ const commentController = {
         });
       }
 
-      const comments = await Comment.getByPostId(postId, parseInt(limit), parseInt(offset));
+      const comments = await Comment.getByPostId(req.supabase, postId, parseInt(limit), parseInt(offset));
 
       res.json({
         success: true,
@@ -147,7 +146,7 @@ const commentController = {
     try {
       const { commentId } = req.params;
 
-      const comment = await Comment.findById(commentId);
+      const comment = await Comment.findById(req.supabase, commentId);
 
       if (!comment || comment.is_deleted) {
         return res.status(404).json({
@@ -176,7 +175,7 @@ const commentController = {
       const { limit = 20, offset = 0 } = req.query;
 
       // Check if parent comment exists
-      const { data: parentComment } = await supabase
+      const { data: parentComment } = await req.supabase
         .from('comments')
         .select('id, is_deleted')
         .eq('id', commentId)
@@ -189,7 +188,7 @@ const commentController = {
         });
       }
 
-      const replies = await Comment.getReplies(commentId, parseInt(limit), parseInt(offset));
+      const replies = await Comment.getReplies(req.supabase, commentId, parseInt(limit), parseInt(offset));
 
       res.json({
         success: true,
@@ -230,7 +229,7 @@ const commentController = {
       }
 
       // Check if comment exists and belongs to user
-      const { data: existingComment } = await supabase
+      const { data: existingComment } = await req.supabase
         .from('comments')
         .select('author_id, is_deleted')
         .eq('id', commentId)
@@ -250,7 +249,7 @@ const commentController = {
         });
       }
 
-      const comment = await Comment.update(commentId, userId, content.trim());
+      const comment = await Comment.update(req.supabase, commentId, userId, content.trim());
 
       res.json({
         success: true,
@@ -273,7 +272,7 @@ const commentController = {
       const { commentId } = req.params;
 
       // Check if comment exists and belongs to user
-      const { data: existingComment } = await supabase
+      const { data: existingComment } = await req.supabase
         .from('comments')
         .select('author_id, is_deleted')
         .eq('id', commentId)
@@ -293,7 +292,7 @@ const commentController = {
         });
       }
 
-      await Comment.delete(commentId, userId);
+      await Comment.delete(req.supabase, commentId, userId);
 
       res.json({
         success: true,
@@ -315,7 +314,7 @@ const commentController = {
       const { commentId } = req.params;
 
       // Check if comment exists
-      const { data: comment } = await supabase
+      const { data: comment } = await req.supabase
         .from('comments')
         .select('id, is_deleted')
         .eq('id', commentId)
@@ -328,7 +327,7 @@ const commentController = {
         });
       }
 
-      await Comment.like(commentId, userId);
+      await Comment.like(req.supabase, commentId, userId);
 
       res.json({
         success: true,
@@ -349,7 +348,7 @@ const commentController = {
       const userId = req.user.id;
       const { commentId } = req.params;
 
-      await Comment.unlike(commentId, userId);
+      await Comment.unlike(req.supabase, commentId, userId);
 
       res.json({
         success: true,
@@ -370,7 +369,7 @@ const commentController = {
       const { commentId } = req.params;
       const { limit = 20, offset = 0 } = req.query;
 
-      const likes = await Comment.getLikes(commentId, parseInt(limit), parseInt(offset));
+      const likes = await Comment.getLikes(req.supabase, commentId, parseInt(limit), parseInt(offset));
 
       res.json({
         success: true,
@@ -395,7 +394,7 @@ const commentController = {
       const { userId } = req.params;
       const { limit = 20, offset = 0 } = req.query;
 
-      const comments = await Comment.getUserComments(userId, parseInt(limit), parseInt(offset));
+      const comments = await Comment.getUserComments(req.supabase, userId, parseInt(limit), parseInt(offset));
 
       res.json({
         success: true,

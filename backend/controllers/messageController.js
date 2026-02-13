@@ -1,6 +1,5 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
-const { supabase } = require('../models');
 
 const messageController = {
   // Send a message
@@ -33,7 +32,7 @@ const messageController = {
       }
 
       // Check if recipient exists
-      const recipient = await User.findById(recipientId);
+      const recipient = await User.findById(req.supabase, recipientId);
       if (!recipient) {
         return res.status(404).json({
           success: false,
@@ -42,7 +41,7 @@ const messageController = {
       }
 
       // Check if blocked
-      const { data: blockData } = await supabase
+      const { data: blockData } = await req.supabase
         .from('blocked_users')
         .select('id')
         .or(`and(blocker_id.eq.${senderId},blocked_id.eq.${recipientId}),and(blocker_id.eq.${recipientId},blocked_id.eq.${senderId})`)
@@ -55,7 +54,7 @@ const messageController = {
         });
       }
 
-      const message = await Message.create({
+      const message = await Message.create(req.supabase, {
         sender_id: senderId,
         recipient_id: recipientId,
         content: content.trim(),
@@ -84,7 +83,7 @@ const messageController = {
       const { limit = 50, offset = 0, before } = req.query;
 
       // Check if user exists
-      const user = await User.findById(userId);
+      const user = await User.findById(req.supabase, userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -93,7 +92,7 @@ const messageController = {
       }
 
       // Check if blocked
-      const { data: blockData } = await supabase
+      const { data: blockData } = await req.supabase
         .from('blocked_users')
         .select('id')
         .or(`and(blocker_id.eq.${currentUserId},blocked_id.eq.${userId}),and(blocker_id.eq.${userId},blocked_id.eq.${currentUserId})`)
@@ -106,7 +105,7 @@ const messageController = {
         });
       }
 
-      let query = supabase
+      let query = req.supabase
         .from('messages')
         .select(`
           *,
@@ -131,7 +130,7 @@ const messageController = {
       if (error) throw error;
 
       // Mark messages as read
-      await Message.markAsRead(userId, currentUserId);
+      await Message.markAsRead(req.supabase, userId, currentUserId);
 
       res.json({
         success: true,
@@ -156,12 +155,22 @@ const messageController = {
     try {
       const userId = req.user.id;
 
-      const { data: conversations, error } = await supabase
-        .rpc('get_conversations', { current_user_id: userId });
+      let conversations;
+      // Try to use RPC if available
+      try {
+        const { data, error } = await req.supabase
+          .rpc('get_conversations', { current_user_id: userId });
 
-      if (error) {
+        if (!error && data) {
+          conversations = data;
+        }
+      } catch (e) {
+        // Fallback or RPC not found
+      }
+
+      if (!conversations) {
         // Fallback query
-        const { data: messages, error: msgError } = await supabase
+        const { data: messages, error: msgError } = await req.supabase
           .from('messages')
           .select(`
             id,
@@ -213,10 +222,7 @@ const messageController = {
           }
         }
 
-        return res.json({
-          success: true,
-          data: Array.from(conversationMap.values())
-        });
+        conversations = Array.from(conversationMap.values());
       }
 
       res.json({
@@ -238,7 +244,7 @@ const messageController = {
       const currentUserId = req.user.id;
       const { userId } = req.params;
 
-      await Message.markAsRead(userId, currentUserId);
+      await Message.markAsRead(req.supabase, userId, currentUserId);
 
       res.json({
         success: true,
@@ -258,7 +264,7 @@ const messageController = {
     try {
       const userId = req.user.id;
 
-      const count = await Message.getUnreadCount(userId);
+      const count = await Message.getUnreadCount(req.supabase, userId);
 
       res.json({
         success: true,
@@ -280,7 +286,7 @@ const messageController = {
       const { messageId } = req.params;
 
       // Check if message exists and belongs to user
-      const { data: message } = await supabase
+      const { data: message } = await req.supabase
         .from('messages')
         .select('sender_id')
         .eq('id', messageId)
@@ -300,7 +306,7 @@ const messageController = {
         });
       }
 
-      await Message.delete(messageId, userId);
+      await Message.delete(req.supabase, messageId, userId);
 
       res.json({
         success: true,
@@ -330,7 +336,7 @@ const messageController = {
       }
 
       // Check if message exists and belongs to user
-      const { data: message } = await supabase
+      const { data: message } = await req.supabase
         .from('messages')
         .select('sender_id, created_at')
         .eq('id', messageId)
@@ -361,7 +367,7 @@ const messageController = {
         });
       }
 
-      const updatedMessage = await Message.edit(messageId, userId, content.trim());
+      const updatedMessage = await Message.edit(req.supabase, messageId, userId, content.trim());
 
       res.json({
         success: true,
@@ -390,7 +396,7 @@ const messageController = {
         });
       }
 
-      const messages = await Message.search(userId, query, parseInt(limit), parseInt(offset));
+      const messages = await Message.search(req.supabase, userId, query, parseInt(limit), parseInt(offset));
 
       res.json({
         success: true,

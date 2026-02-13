@@ -1,6 +1,5 @@
 const Story = require('../models/Story');
 const User = require('../models/User');
-const { supabase } = require('../models');
 
 const storyController = {
   // Create a story
@@ -28,7 +27,7 @@ const storyController = {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + duration);
 
-      const story = await Story.create({
+      const story = await Story.create(req.supabase, {
         author_id: userId,
         media_url,
         media_type,
@@ -56,7 +55,7 @@ const storyController = {
     try {
       const userId = req.user.id;
 
-      const stories = await Story.getFeed(userId);
+      const stories = await Story.getFeed(req.supabase, userId);
 
       // Group stories by user
       const groupedStories = stories.reduce((acc, story) => {
@@ -99,7 +98,7 @@ const storyController = {
       const currentUserId = req.user?.id;
 
       // Check if user exists
-      const user = await User.findById(userId);
+      const user = await User.findById(req.supabase, userId);
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -109,7 +108,7 @@ const storyController = {
 
       // Check if blocked
       if (currentUserId) {
-        const { data: blockData } = await supabase
+        const { data: blockData } = await req.supabase
           .from('blocked_users')
           .select('id')
           .or(`and(blocker_id.eq.${currentUserId},blocked_id.eq.${userId}),and(blocker_id.eq.${userId},blocked_id.eq.${currentUserId})`)
@@ -123,7 +122,7 @@ const storyController = {
         }
       }
 
-      const stories = await Story.getUserStories(userId, currentUserId);
+      const stories = await Story.getUserStories(req.supabase, userId, currentUserId);
 
       res.json({
         success: true,
@@ -153,7 +152,7 @@ const storyController = {
       const { storyId } = req.params;
       const currentUserId = req.user?.id;
 
-      const story = await Story.findById(storyId, currentUserId);
+      const story = await Story.findById(req.supabase, storyId, currentUserId);
 
       if (!story || story.is_deleted) {
         return res.status(404).json({
@@ -172,7 +171,7 @@ const storyController = {
 
       // Check if blocked
       if (currentUserId) {
-        const { data: blockData } = await supabase
+        const { data: blockData } = await req.supabase
           .from('blocked_users')
           .select('id')
           .or(`and(blocker_id.eq.${currentUserId},blocked_id.eq.${story.author_id}),and(blocker_id.eq.${story.author_id},blocked_id.eq.${currentUserId})`)
@@ -206,7 +205,7 @@ const storyController = {
       const { storyId } = req.params;
 
       // Check if story exists
-      const { data: story } = await supabase
+      const { data: story } = await req.supabase
         .from('stories')
         .select('author_id, is_deleted, expires_at')
         .eq('id', storyId)
@@ -234,7 +233,7 @@ const storyController = {
         });
       }
 
-      await Story.markAsViewed(storyId, viewerId);
+      await Story.markAsViewed(req.supabase, storyId, viewerId);
 
       res.json({
         success: true,
@@ -255,7 +254,7 @@ const storyController = {
       const userId = req.user.id;
       const { storyId } = req.params;
 
-      const viewers = await Story.getViewers(storyId, userId);
+      const viewers = await Story.getViewers(req.supabase, storyId, userId);
 
       res.json({
         success: true,
@@ -277,7 +276,7 @@ const storyController = {
       const { storyId } = req.params;
 
       // Check if story exists and belongs to user
-      const { data: story } = await supabase
+      const { data: story } = await req.supabase
         .from('stories')
         .select('author_id')
         .eq('id', storyId)
@@ -297,7 +296,7 @@ const storyController = {
         });
       }
 
-      await Story.delete(storyId, userId);
+      await Story.delete(req.supabase, storyId, userId);
 
       res.json({
         success: true,
@@ -318,7 +317,7 @@ const storyController = {
       const userId = req.user.id;
       const { storyId } = req.params;
 
-      const stats = await Story.getStats(storyId, userId);
+      const stats = await Story.getStats(req.supabase, storyId, userId);
 
       res.json({
         success: true,
@@ -338,7 +337,7 @@ const storyController = {
     try {
       const userId = req.user.id;
 
-      const { data: stories, error } = await supabase
+      const { data: stories, error } = await req.supabase
         .from('stories')
         .select(`
           *,
@@ -353,7 +352,7 @@ const storyController = {
       // Get unique viewers for each story
       const storiesWithStats = await Promise.all(
         stories.map(async (story) => {
-          const { data: viewers } = await supabase
+          const { data: viewers } = await req.supabase
             .from('story_views')
             .select('viewer_id')
             .eq('story_id', story.id);

@@ -249,8 +249,8 @@ CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
 CREATE TABLE notification_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    like BOOLEAN DEFAULT TRUE,
-    comment BOOLEAN DEFAULT TRUE,
+    "like" BOOLEAN DEFAULT TRUE,
+    "comment" BOOLEAN DEFAULT TRUE,
     follow BOOLEAN DEFAULT TRUE,
     mention BOOLEAN DEFAULT TRUE,
     share BOOLEAN DEFAULT TRUE,

@@ -1,5 +1,4 @@
-const { supabase, supabaseAdmin } = require('../models');
-const jwt = require('jsonwebtoken');
+const { supabaseAdmin } = require('../models');
 
 const authController = {
   // Register new user
@@ -25,7 +24,8 @@ const authController = {
       }
 
       // Check if username exists
-      const { data: existingUser } = await supabase
+      // Use req.supabase (likely anon client here) to check availability
+      const { data: existingUser } = await req.supabase
         .from('users')
         .select('id')
         .eq('username', username.toLowerCase())
@@ -39,7 +39,8 @@ const authController = {
       }
 
       // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Pass metadata so the database trigger can populate the public.users table
+      const { data: authData, error: authError } = await req.supabase.auth.signUp({
         email,
         password,
         options: {
@@ -52,32 +53,19 @@ const authController = {
 
       if (authError) throw authError;
 
-      // Create user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: email.toLowerCase(),
-          username: username.toLowerCase(),
-          display_name: display_name || username,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (profileError) {
-        // Rollback auth user if profile creation fails
-        if (supabaseAdmin) {
-          await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-        }
-        throw profileError;
-      }
+      // Note: Data insertion into public.users is handled by the database trigger 'on_auth_user_created'
+      // attempting to manually insert here could cause race conditions or duplicate key errors.
 
       res.status(201).json({
         success: true,
-        message: 'User registered successfully',
+        message: 'User registered successfully. Please check your email for verification link if enabled.',
         data: {
-          user: profile,
+          user: {
+            id: authData.user?.id,
+            email: authData.user?.email,
+            username: username.toLowerCase(),
+            display_name: display_name || username
+          },
           session: authData.session
         }
       });
@@ -102,33 +90,47 @@ const authController = {
         });
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await req.supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) throw error;
 
-      // Get user profile
-      const { data: profile, error: profileError } = await supabase
+      // Get user profile using req.supabase
+      // Note: RLS policies must allow users to read their own profile
+
+      const { data: profile, error: profileError } = await req.supabase
         .from('users')
         .select('*')
         .eq('id', data.user.id)
         .single();
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+      }
 
       // Update last login
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString() })
-        .eq('id', data.user.id);
+      // We attempt to update, but if RLS prevents it (e.g. only allow update matching auth.uid()) and we are using anon client with just a session...
+      // Actually, req.supabase SHOULD have the token if we set it?
+      // No, in 'login', req.supabase is initialized with the request headers. The request headers do NOT contain the token yet.
+      // So req.supabase is ANON.
+      // To update the user's last_login, we would need to use a client authenticated with the NEW session.
+      // Or use supabaseAdmin.
+      // Let's use supabaseAdmin for this system task if available, or skip it.
+
+      if (supabaseAdmin) {
+        await supabaseAdmin
+          .from('users')
+          .update({ last_login: new Date().toISOString() })
+          .eq('id', data.user.id);
+      }
 
       res.json({
         success: true,
         message: 'Login successful',
         data: {
-          user: profile,
+          user: profile || data.user,
           session: data.session
         }
       });
@@ -144,7 +146,7 @@ const authController = {
   // Logout user
   async logout(req, res) {
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await req.supabase.auth.signOut();
       if (error) throw error;
 
       res.json({
@@ -163,9 +165,11 @@ const authController = {
   // Get current user
   async me(req, res) {
     try {
-      const userId = req.user.id;
+      // req.user is set by middleware, but we should verify with DB
+      const userId = req.user.id; // From middleware
 
-      const { data, error } = await supabase
+      // Use req.supabase which is authenticated for this user
+      const { data, error } = await req.supabase
         .from('users')
         .select(`
           *,
@@ -177,6 +181,13 @@ const authController = {
         .single();
 
       if (error) throw error;
+
+      // Update last login async
+      // This works because req.supabase has the user's token
+      await req.supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userId);
 
       res.json({
         success: true,
@@ -203,7 +214,7 @@ const authController = {
         });
       }
 
-      const { data, error } = await supabase.auth.refreshSession({
+      const { data, error } = await req.supabase.auth.refreshSession({
         refresh_token
       });
 
@@ -236,7 +247,7 @@ const authController = {
         });
       }
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await req.supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${process.env.FRONTEND_URL}/reset-password`
       });
 
@@ -267,7 +278,7 @@ const authController = {
         });
       }
 
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await req.supabase.auth.updateUser({
         password
       });
 
@@ -298,7 +309,7 @@ const authController = {
         });
       }
 
-      const { error } = await supabase.auth.verifyOtp({
+      const { error } = await req.supabase.auth.verifyOtp({
         token_hash,
         type: 'email'
       });
@@ -323,7 +334,7 @@ const authController = {
     try {
       const { provider } = req.body;
 
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await req.supabase.auth.signInWithOAuth({
         provider,
         options: {
           redirectTo: `${process.env.FRONTEND_URL}/auth/callback`

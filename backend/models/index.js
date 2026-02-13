@@ -12,20 +12,20 @@ const supabase = createClient(
 );
 
 // Admin client for operations that need to bypass RLS
-const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY 
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
       }
-    )
+    }
+  )
   : null;
 
 module.exports = {
-  supabase,
+  // supabase, // DEPRECATED: Use req.supabase from middleware instead
   supabaseAdmin
 };

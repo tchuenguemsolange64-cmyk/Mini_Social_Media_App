@@ -1,4 +1,3 @@
-const { supabase, supabaseAdmin } = require('../models');
 const path = require('path');
 
 const uploadController = {
@@ -6,7 +5,7 @@ const uploadController = {
   async uploadAvatar(req, res) {
     try {
       const userId = req.user.id;
-      
+
       if (!req.file) {
         return res.status(400).json({
           success: false,
@@ -18,8 +17,8 @@ const uploadController = {
       const fileExt = path.extname(file.originalname);
       const fileName = `avatars/${userId}/${Date.now()}${fileExt}`;
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
+      // Upload to Supabase Storage using req.supabase
+      const { data, error } = await req.supabase.storage
         .from('media')
         .upload(fileName, file.buffer, {
           contentType: file.mimetype,
@@ -29,12 +28,12 @@ const uploadController = {
       if (error) throw error;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = req.supabase.storage
         .from('media')
         .getPublicUrl(fileName);
 
       // Update user avatar
-      await supabase
+      await req.supabase
         .from('users')
         .update({ avatar_url: publicUrl })
         .eq('id', userId);
@@ -57,7 +56,7 @@ const uploadController = {
   async uploadPostMedia(req, res) {
     try {
       const userId = req.user.id;
-      
+
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({
           success: false,
@@ -71,7 +70,7 @@ const uploadController = {
         const fileExt = path.extname(file.originalname);
         const fileName = `posts/${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}${fileExt}`;
 
-        const { data, error } = await supabase.storage
+        const { data, error } = await req.supabase.storage
           .from('media')
           .upload(fileName, file.buffer, {
             contentType: file.mimetype,
@@ -80,7 +79,7 @@ const uploadController = {
 
         if (error) throw error;
 
-        const { data: { publicUrl } } = supabase.storage
+        const { data: { publicUrl } } = req.supabase.storage
           .from('media')
           .getPublicUrl(fileName);
 
@@ -108,7 +107,7 @@ const uploadController = {
   async uploadStoryMedia(req, res) {
     try {
       const userId = req.user.id;
-      
+
       if (!req.file) {
         return res.status(400).json({
           success: false,
@@ -120,7 +119,7 @@ const uploadController = {
       const fileExt = path.extname(file.originalname);
       const fileName = `stories/${userId}/${Date.now()}${fileExt}`;
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await req.supabase.storage
         .from('media')
         .upload(fileName, file.buffer, {
           contentType: file.mimetype,
@@ -129,7 +128,7 @@ const uploadController = {
 
       if (error) throw error;
 
-      const { data: { publicUrl } } = supabase.storage
+      const { data: { publicUrl } } = req.supabase.storage
         .from('media')
         .getPublicUrl(fileName);
 
@@ -175,7 +174,7 @@ const uploadController = {
         });
       }
 
-      const { error } = await supabase.storage
+      const { error } = await req.supabase.storage
         .from('media')
         .remove([storagePath]);
 
@@ -206,7 +205,7 @@ const uploadController = {
         });
       }
 
-      const { data, error } = await supabase.storage
+      const { data, error } = await req.supabase.storage
         .from('media')
         .createSignedUrl(filePath, expiresIn);
 

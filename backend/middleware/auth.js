@@ -14,8 +14,22 @@ const supabase = createClient(
 // Require authentication middleware
 const requireAuth = async (req, res, next) => {
   try {
+    // Optimization: If optionalAuth has already run and authenticated the user
+    if (req.user && req.supabase) {
+      return next();
+    }
+
+    // If optionalAuth ran but found no user, and we strictly require auth here
+    if (req.sb_initialized && !req.user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+        code: 'NO_AUTH_HEADER'
+      });
+    }
+
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       return res.status(401).json({
         success: false,
@@ -25,7 +39,7 @@ const requireAuth = async (req, res, next) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    
+
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -33,9 +47,26 @@ const requireAuth = async (req, res, next) => {
         code: 'INVALID_TOKEN_FORMAT'
       });
     }
-    
+
+    // Create a request-scoped Supabase client with the user's token
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader
+          }
+        },
+        auth: {
+          persistSession: false
+        }
+      }
+    );
+
+    // Verify token and get user
     const { data: { user }, error } = await supabase.auth.getUser(token);
-    
+
     if (error || !user) {
       return res.status(401).json({
         success: false,
@@ -43,14 +74,14 @@ const requireAuth = async (req, res, next) => {
         code: 'INVALID_TOKEN'
       });
     }
-    
-    // Get user profile
+
+    // Get user profile using the RLS-aware client
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', user.id)
       .single();
-    
+
     if (profileError || !profile) {
       return res.status(401).json({
         success: false,
@@ -67,9 +98,13 @@ const requireAuth = async (req, res, next) => {
         code: 'ACCOUNT_INACTIVE'
       });
     }
-    
+
+    // Attach user, token, AND the RLS-aware client to the request
     req.user = profile;
     req.token = token;
+    req.supabase = supabase;
+    req.sb_initialized = true;
+
     next();
   } catch (err) {
     console.error('Auth middleware error:', err);
@@ -81,42 +116,88 @@ const requireAuth = async (req, res, next) => {
   }
 };
 
-// Optional authentication middleware (allows both authenticated and unauthenticated requests)
+// Optional authentication middleware
 const optionalAuth = async (req, res, next) => {
   try {
+    // Flag that we attempted initialization
+    req.sb_initialized = true;
+
     const authHeader = req.headers.authorization;
-    
+
+    // Default to anon client if no auth header
+    let supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      {
+        auth: { persistSession: false }
+      }
+    );
+
     if (!authHeader) {
       req.user = null;
+      req.supabase = supabase;
       return next();
     }
 
     const token = authHeader.replace('Bearer ', '');
-    
+
+    // Create RLS-aware client
+    supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader
+          }
+        },
+        auth: { persistSession: false }
+      }
+    );
+
     const { data: { user }, error } = await supabase.auth.getUser(token);
-    
+
     if (error || !user) {
       req.user = null;
+      // Revert to anon client if token is invalid
+      req.supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY,
+        { auth: { persistSession: false } }
+      );
       return next();
     }
-    
-    // Get user profile
+
     const { data: profile, error: profileError } = await supabase
       .from('users')
       .select('*')
       .eq('id', user.id)
       .single();
-    
+
     if (profileError || !profile || !profile.is_active) {
       req.user = null;
+      // Revert to anon client if profile issue
+      req.supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY,
+        { auth: { persistSession: false } }
+      );
       return next();
     }
-    
+
     req.user = profile;
     req.token = token;
+    req.supabase = supabase; // Authenticated client
+
     next();
   } catch (err) {
     req.user = null;
+    req.supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      { auth: { persistSession: false } }
+    );
+    req.sb_initialized = true;
     next();
   }
 };
@@ -124,24 +205,24 @@ const optionalAuth = async (req, res, next) => {
 // Rate limiting middleware (basic implementation)
 const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000) => {
   const requests = new Map();
-  
+
   return (req, res, next) => {
     const userId = req.user?.id || req.ip;
     const now = Date.now();
-    
+
     if (!requests.has(userId)) {
       requests.set(userId, { count: 1, resetTime: now + windowMs });
       return next();
     }
-    
+
     const userRequests = requests.get(userId);
-    
+
     if (now > userRequests.resetTime) {
       userRequests.count = 1;
       userRequests.resetTime = now + windowMs;
       return next();
     }
-    
+
     if (userRequests.count >= maxRequests) {
       return res.status(429).json({
         success: false,
@@ -149,7 +230,7 @@ const rateLimit = (maxRequests = 100, windowMs = 15 * 60 * 1000) => {
         code: 'RATE_LIMIT_EXCEEDED'
       });
     }
-    
+
     userRequests.count++;
     next();
   };

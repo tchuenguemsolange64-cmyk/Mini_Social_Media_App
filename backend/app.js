@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { optionalAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -70,6 +71,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Global Auth Middleware (ensures req.supabase is available)
+app.use(optionalAuth);
+
 // API Routes
 app.use('/api', routes);
 
@@ -109,7 +113,7 @@ const server = app.listen(PORT, () => {
 // Graceful shutdown
 const gracefulShutdown = (signal) => {
   console.log(`\n${signal} received. Starting graceful shutdown...`);
-  
+
   server.close(() => {
     console.log('HTTP server closed.');
     process.exit(0);
